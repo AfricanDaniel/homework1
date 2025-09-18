@@ -1,0 +1,7 @@
+1) googled what build_type is ament_python to help find <build_type>
+
+2) googled `    make sure there are no other ros nodes `to get `rosnode list`
+
+
+
+
