@@ -1,16 +1,16 @@
 # Copy this file into your homework repository and fill in the ${?} blanks in the document strings
 """
-Publishes twist that will move a robot back and forth in the ${?} direction
-while randomly providing an angular velocity about the ${?}-axis.
+Publishes twist that will move a robot back and forth in the x direction
+while randomly providing an angular velocity about the z-axis.
 
 PUBLISHERS:
-  + ${topic_name} (${message_type}) - The velocity of an erratic turtle path
+  + cmd_vel (geometry_msg/msg/Twist) - The velocity of an erratic turtle path
 
 SERVICES:
-  + ${topic_name} (${service_type}) - Position of the new turtle
+  + switch (crazy_turtle_interface/srv/Switch) - Position of the new turtle
 
 PARAMETERS:
-  + ${param_name} (${param_type}) - Velocity driving the robot
+  + velocity (double) - Velocity driving the robot
 
 """
 
