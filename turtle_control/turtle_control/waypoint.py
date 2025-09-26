@@ -3,8 +3,11 @@
 
 from example_interfaces.msg import Int64
 import rclpy
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.node import Node
 from std_srvs.srv import Empty
+from turtlesim_msgs.srv import SetPen, TeleportAbsolute
+from turtle_interfaces.srv import Waypoints
 
 
 class WayPoint(Node):
@@ -36,13 +39,71 @@ class WayPoint(Node):
         self.get_logger().info('WayPoint')
         self.declare_parameter('increment', 1)
         self._inc = self.get_parameter('increment').value
+        self.personal_call_back_group = MutuallyExclusiveCallbackGroup()
         self._state = 0
+
         self._pub = self.create_publisher(Int64, 'count', 10)
         self._tmr = self.create_timer(0.011, self.timer_callback)
-        self._srv = self.create_service(Empty, 'reset', self.reset_callback)
         self._tog = self.create_service(Empty, 'toggle', self.toggle_callback)
+
+        self.reset = self.create_client(Empty, '/reset', callback_group=self.personal_call_back_group)
+        self.set_pen = self.create_client(SetPen, 'turtle1/set_pen', callback_group=self.personal_call_back_group)
+        self.teleport = self.create_client(TeleportAbsolute, 'turtle1/teleport_absolute', callback_group=self.personal_call_back_group)
+
+        self.set_pen_msg = SetPen.Request(r=100,g=100, b=100, width=5)
+        self.teleport_msg = TeleportAbsolute.Request()
+
+        self._load = self.create_service(Waypoints, 'load', self.load_callback)
         self._sub = self.create_subscription(Int64, 'uncount', self.uncount_callback, 10)
         self._count = 0
+
+    async def load_callback(self, request, response):
+        self.get_logger().info('load_callback  called')
+
+        response.distance = 0
+        if request.waypoint is None:
+            return response
+        await self.reset.call_async(Empty.Request())
+
+        self.set_pen_msg.off = 1
+        await self.set_pen.call_async(self.set_pen_msg)
+
+        for position in request.waypoint:
+            #corner1_x, corner1_y, corner2_x, corner2_y = position
+            corner1_x = position.x + 0.5
+            corner1_y = position.y + 0.5
+            corner2_x = position.x - 0.5
+            corner2_y = position.y - 0.5
+
+            self.teleport_msg.x, self.teleport_msg.y = corner1_x, corner1_y
+            await self.teleport.call_async(self.teleport_msg)
+
+            self.set_pen_msg.off = 0
+            await self.set_pen.call_async(self.set_pen_msg)
+
+            self.teleport_msg.x, self.teleport_msg.y = corner2_x, corner2_y
+            await self.teleport.call_async(self.teleport_msg)
+            self.set_pen_msg.off = 1
+            await self.set_pen.call_async(self.set_pen_msg)
+
+            ##second set of corners??
+            corner1_x = position.x - 0.5
+            corner1_y = position.y + 0.5
+            corner2_x = position.x + 0.5
+            corner2_y = position.y - 0.5
+
+            self.teleport_msg.x, self.teleport_msg.y = corner1_x, corner1_y
+            await self.teleport.call_async(self.teleport_msg)
+
+            self.set_pen_msg.off = 0
+            await self.set_pen.call_async(self.set_pen_msg)
+
+            self.teleport_msg.x, self.teleport_msg.y = corner2_x, corner2_y
+            await self.teleport.call_async(self.teleport_msg)
+            self.set_pen_msg.off = 1
+            await self.set_pen.call_async(self.set_pen_msg)
+
+        return response
 
     def toggle_callback(self, request, response):
         if self._state == 1:
