@@ -1,5 +1,5 @@
 """A demonstration Node for ME495."""
-
+import math
 
 from example_interfaces.msg import Int64
 import rclpy
@@ -68,7 +68,16 @@ class WayPoint(Node):
         self.set_pen_msg.off = 1
         await self.set_pen.call_async(self.set_pen_msg)
 
-        for position in request.waypoint:
+        previous_p = None
+        next_p = None
+
+        for index, position in enumerate(request.waypoint):
+            if index > 0:
+                next_p = (position.x, position.y)
+            else:
+                next_p = (position.x, position.y)
+                previous_p = (position.x, position.y)
+
             #corner1_x, corner1_y, corner2_x, corner2_y = position
             corner1_x = position.x + 0.5
             corner1_y = position.y + 0.5
@@ -103,6 +112,11 @@ class WayPoint(Node):
             self.set_pen_msg.off = 1
             await self.set_pen.call_async(self.set_pen_msg)
 
+            response.distance  += math.dist(previous_p, next_p)
+            previous_p = next_p
+
+
+        self.get_logger().info(f'Distance traveled ? : {response.distance}')
         return response
 
     def toggle_callback(self, request, response):
