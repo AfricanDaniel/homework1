@@ -1,0 +1,4 @@
+# use a strange formula to set the new location of the turtle
+geometry_msgs/Point[] waypoint
+---
+float64 distance # the distance of waypoints
