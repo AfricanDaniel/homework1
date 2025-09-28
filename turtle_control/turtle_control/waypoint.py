@@ -5,7 +5,9 @@ from example_interfaces.msg import Int64
 import rclpy
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.node import Node
+from rqt_srv.services import Services
 from std_srvs.srv import Empty
+from sympy.physics.units import frequency
 from turtlesim_msgs.srv import SetPen, TeleportAbsolute
 from turtlesim_msgs.msg import Pose
 from turtle_interfaces.srv import Waypoints
@@ -19,11 +21,16 @@ class WayPoint(Node):
 
     Publishes
     ---------
-    count : example_interfaces/msg/Int64 - the count that is incremented
+    Pose : /turtle1/pose - live position of the turtle
+    color_sensor : /turtle1/color_sensor - color of the turtle
+    cmd_vel :/turtle1/cmd_vel - the velocity of the turtle
+    ErrorMetric : /loop_metrics - the metrics returned at the end of each loop
+
 
     Parameters
     ----------
-    increment : Integer - the amount to increment the count by each time
+    tolerance :
+    frequency :
 
     Services
     --------
@@ -46,6 +53,12 @@ class WayPoint(Node):
         #personal call back group to avoid blocking
         self.personal_call_back_group = MutuallyExclusiveCallbackGroup()
 
+        self.tolerance = self.declare_parameter('tolerance', 0.05)
+        self.tolerance = float(self.get_parameter('tolerance').value)
+
+        self.declare_parameter('frequency', 100)
+        frequency = self.get_parameter('frequency').value
+
         #state determines if toggle is on or off, 0=off, 1=on
         self._state = 0
 
@@ -58,7 +71,7 @@ class WayPoint(Node):
         self._waypoints = None
 
         self._pub = self.create_publisher(Int64, 'count', 10)
-        self._tmr = self.create_timer(0.011, self.timer_callback)
+        self._tmr = self.create_timer(1/frequency, self.timer_callback)
         self._tog = self.create_service(Empty, 'toggle', self.toggle_callback)
 
         self.reset = self.create_client(Empty, '/reset', callback_group=self.personal_call_back_group)
@@ -76,7 +89,8 @@ class WayPoint(Node):
         self._load = self.create_service(Waypoints, 'load', self.load_callback)
         self._sub = self.create_subscription(Int64, 'uncount', self.uncount_callback, 10)
         self._count = 0
-        self.tolerance = 0.05
+
+
 
         self.complete_loops = 0
         self.actual_distance = 0.0
