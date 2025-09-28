@@ -75,7 +75,7 @@ class Mover(Node):
             raise RuntimeError('Timeout waiting for "spawn" service to become available')
 
     def switch_callback(self, request, response):
-        """ Callback function for the ${?} service
+        """ Callback function for the ${switch} service
 
         Kills turtle1 and respawns it an a new location
 
