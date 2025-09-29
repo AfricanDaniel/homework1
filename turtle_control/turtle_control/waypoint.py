@@ -137,7 +137,7 @@ class WayPoint(Node):
                 self._waypoints_index += 1
 
                 if self._waypoints_index >= len(self._waypoints):
-                    self._state = 0
+                    #self._state = 0
 
                     self.complete_loops = self.complete_loops + 1
                     self.error = self.actual_distance - self.planned_distance*self.complete_loops
@@ -147,14 +147,18 @@ class WayPoint(Node):
 
                     self.get_logger().info(f"[loop {self.complete_loops} complete] planned_distance={self.planned_distance}"
                                            f" actual_distance={self.actual_distance} error={self.error}")
-                    return
 
+                    self.actual_distance = 0.0
+                    self._waypoints_index = 0
+                    #return
 
-            kp_angular_velocity = 0.5
-            kp_linear_velocity = 0.5
+            if abs(difference_in_theta) > 0.1:
+                self.linear_velocity = 0.0
+                self.angular_velocity = 2.0 * difference_in_theta
+            else:
+                self.linear_velocity = 0.5 * distance_to_destination
+                self.angular_velocity = 0.5 * difference_in_theta
 
-            self.linear_velocity = kp_linear_velocity * distance_to_destination
-            self.angular_velocity = kp_angular_velocity * difference_in_theta
 
             twist = self.turtle_twist(self.linear_velocity, self.angular_velocity)
             self.pub_twist.publish(twist)
@@ -189,6 +193,8 @@ class WayPoint(Node):
         self.get_logger().info('load_callback  called')
 
         self._waypoints = request.waypoint
+        self._waypoints.append(self._waypoints[0])
+
         response.distance = 0
 
         if request.waypoint is None:
