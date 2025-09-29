@@ -217,10 +217,10 @@ class WayPoint(Node):
                 previous_p = (position.x, position.y)
 
             #corner1_x, corner1_y, corner2_x, corner2_y = position
-            corner1_x = position.x + 0.5
-            corner1_y = position.y + 0.5
-            corner2_x = position.x - 0.5
-            corner2_y = position.y - 0.5
+            corner1_x = position.x + 0.1
+            corner1_y = position.y + 0.1
+            corner2_x = position.x - 0.1
+            corner2_y = position.y - 0.1
 
             self.teleport_msg.x, self.teleport_msg.y = corner1_x, corner1_y
             await self.teleport.call_async(self.teleport_msg)
@@ -234,10 +234,10 @@ class WayPoint(Node):
             await self.set_pen.call_async(self.set_pen_msg)
 
             ##second set of corners??
-            corner1_x = position.x - 0.5
-            corner1_y = position.y + 0.5
-            corner2_x = position.x + 0.5
-            corner2_y = position.y - 0.5
+            corner1_x = position.x - 0.1
+            corner1_y = position.y + 0.1
+            corner2_x = position.x + 0.1
+            corner2_y = position.y - 0.1
 
             self.teleport_msg.x, self.teleport_msg.y = corner1_x, corner1_y
             await self.teleport.call_async(self.teleport_msg)
