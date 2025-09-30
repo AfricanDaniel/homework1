@@ -149,7 +149,7 @@ If the nodes launched from the `launchfile` are not running, you will get incorr
    ```
 
 5. What happens to the turtle's motion if you use `ros2 param set /mover velocity 12.0` to change `/mover velocity` to 12 while the launchfile is running? `same`
-6. Use the Linux command `kill -9 <pid>` to kill the `/mover` node.
+6. Use the Linux command `kill -9 <pid>  or pkill <node name>` to kill the `/mover` node.
 7. Use the ROS command `ros2 run crazy_turtle mover --ros-args -p velocity:=12.0 -r cmd_vel:=/turtle1/cmd_vel` to start the `/mover` node with a velocity of 12.
     - HINT: Be sure to remap `cmd_vel` to `/turtle1/cmd_vel`.
 8. What happened to the turtle's velocity after relaunching `mover`? faster}`

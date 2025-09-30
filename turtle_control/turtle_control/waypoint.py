@@ -1,18 +1,16 @@
-"""A demonstration Node for ME495."""
+"""Waypoint Node for HW 1"""
 import math
 
-from example_interfaces.msg import Int64
 import rclpy
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.node import Node
-from rqt_srv.services import Services
-from std_srvs.srv import Empty
-from sympy.physics.units import frequency
-from turtlesim_msgs.srv import SetPen, TeleportAbsolute
-from turtlesim_msgs.msg import Pose
-from turtle_interfaces.srv import Waypoints
+
 from geometry_msgs.msg import Twist, Vector3
+from std_srvs.srv import Empty
 from turtle_interfaces.msg import ErrorMetric
+from turtle_interfaces.srv import Waypoints
+from turtlesim_msgs.msg import Pose
+from turtlesim_msgs.srv import SetPen, TeleportAbsolute
 
 
 class WayPoint(Node):
@@ -21,25 +19,22 @@ class WayPoint(Node):
 
     Publishes
     ---------
-    Pose : /turtle1/pose - live position of the turtle
-    color_sensor : /turtle1/color_sensor - color of the turtle
-    cmd_vel :/turtle1/cmd_vel - the velocity of the turtle
-    ErrorMetric : /loop_metrics - the metrics returned at the end of each loop
-
+    Twist : The linear and angular velocity of the turtle
+    ErrorMetric : the metrics returned at the end of each loop
 
     Parameters
     ----------
-    tolerance :
-    frequency :
+    tolerance : the tolerance that the error has to be within
+    frequency : how frequent the timer is publishing
 
     Services
     --------
-    reset (std_srv/srv/Empty) - reset the count
+    load (std_srv/srv/Waypoints) - Loads the waypoints passed in
     toggle (std_srv/srv/Toggle) - toggles between MOVING and STOPPED
 
     Subscribes
     ----------
-    uncount (std_msgs/msg/Int64) - subtract a value from the count
+    pose (turtlesim_msgs/msg/Pose) - The position of the turtle
 
     """
 
@@ -47,55 +42,48 @@ class WayPoint(Node):
         """Create WayPoint node."""
         super().__init__('waypoint')
         self.get_logger().info('WayPoint')
-        self.declare_parameter('increment', 1)
-        self._inc = self.get_parameter('increment').value
 
-        #personal call back group to avoid blocking
-        self.personal_call_back_group = MutuallyExclusiveCallbackGroup()
+        """initializing all parameters"""
+        # state determines if toggle is on or off, 0=off, 1=on
+        self._state = 0
+        self.velocity = 10.0
+        self.turtle_pose = Pose()
+        self._waypoints = None
 
         self.tolerance = self.declare_parameter('tolerance', 0.05)
         self.tolerance = float(self.get_parameter('tolerance').value)
-
         self.declare_parameter('frequency', 100)
         frequency = self.get_parameter('frequency').value
 
-        #state determines if toggle is on or off, 0=off, 1=on
-        self._state = 0
-
-
-        self.velocity = 10.0
-        self.turtle_pose = Pose()
-
-        self.turtle_live_listener = self.create_subscription(Pose, '/turtle1/pose', self.pose_callback, 10)
-
-        self._waypoints = None
-
-        self._pub = self.create_publisher(Int64, 'count', 10)
-        self._tmr = self.create_timer(1/frequency, self.timer_callback)
-        self._tog = self.create_service(Empty, 'toggle', self.toggle_callback)
-
-        self.reset = self.create_client(Empty, '/reset', callback_group=self.personal_call_back_group)
-        self.set_pen = self.create_client(SetPen, 'turtle1/set_pen', callback_group=self.personal_call_back_group)
-        self.teleport = self.create_client(TeleportAbsolute, 'turtle1/teleport_absolute', callback_group=self.personal_call_back_group)
-
-        self.pub_twist = self.create_publisher(Twist, "turtle1/cmd_vel", 10)
-        self.pub_metrics = self.create_publisher(ErrorMetric, "/loop_metrics", 10)
-
-
-        self.set_pen_msg = SetPen.Request(r=100,g=100, b=100, width=5)
-        self.teleport_msg = TeleportAbsolute.Request()
-
-
-        self._load = self.create_service(Waypoints, 'load', self.load_callback)
-        self._sub = self.create_subscription(Int64, 'uncount', self.uncount_callback, 10)
-        self._count = 0
-
-
-
+        """initializing all helper parameters"""
         self.complete_loops = 0
         self.actual_distance = 0.0
         self.prev_pose = None
         self.planned_distance = 0.0
+        #personal call back group to avoid blocking
+        self.personal_call_back_group = MutuallyExclusiveCallbackGroup()
+
+        """Placing all the publishers in one location"""
+        self.pub_twist = self.create_publisher(Twist, "turtle1/cmd_vel", 10)
+        self.pub_metrics = self.create_publisher(ErrorMetric, "/loop_metrics", 10)
+
+        """Placing all the subscribers in one location"""
+        self.turtle_live_listener = self.create_subscription(Pose, '/turtle1/pose', self.pose_callback, 10)
+
+        """Placing all the Services in one location"""
+        self._load = self.create_service(Waypoints, 'load', self.load_callback)
+        self._tog = self.create_service(Empty, 'toggle', self.toggle_callback)
+
+        """Placing all the Clients in one location"""
+        self.reset = self.create_client(Empty, '/reset', callback_group=self.personal_call_back_group)
+        self.set_pen = self.create_client(SetPen, 'turtle1/set_pen', callback_group=self.personal_call_back_group)
+        self.teleport = self.create_client(TeleportAbsolute, 'turtle1/teleport_absolute',
+                                           callback_group=self.personal_call_back_group)
+
+        """All remainders"""
+        self._tmr = self.create_timer(1/frequency, self.timer_callback)
+        self.set_pen_msg = SetPen.Request(r=100,g=100, b=100, width=5)
+        self.teleport_msg = TeleportAbsolute.Request()
 
 
     def timer_callback(self):
@@ -106,22 +94,17 @@ class WayPoint(Node):
                 self.get_logger().info("POSE no recieved yet")
                 return
 
+            """Get the next waypoint (x, y) we are trying to go to"""
             dest =  self._waypoints[self._waypoints_index]
             destination_x = dest.x
             destination_y = dest.y
-            destination_z = dest.z
-            #destination_x, destination_y, destination_z =  self._waypoints[self._waypoints_index]
 
-            current_x = self.turtle_pose.x
-            current_y = self.turtle_pose.y
-            current_theta = self.turtle_pose.theta
-            #current_x, current_y, current_theta = self.turtle_pose
-
-            dy = destination_y - current_y
-            dx = destination_x - current_x
+            """Get the difference between destination and current pos"""
+            dy = destination_y - self.turtle_pose.y
+            dx = destination_x - self.turtle_pose.x
 
             distance_to_destination = math.sqrt(dx * dx + dy * dy)
-            difference_in_theta = math.atan2(dy, dx) - current_theta
+            difference_in_theta = math.atan2(dy, dx) - self.turtle_pose.theta
 
             ####
             while difference_in_theta > math.pi:
@@ -140,17 +123,15 @@ class WayPoint(Node):
                     #self._state = 0
 
                     self.complete_loops = self.complete_loops + 1
-                    self.error = self.actual_distance - self.planned_distance*self.complete_loops
+                    self.error = self.actual_distance - self.planned_distance * self.complete_loops
 
                     self.pub_metrics.publish(ErrorMetric(complete_loops=int(self.complete_loops), actual_distance=float(self.actual_distance),
                                                          error=float(self.error)))
 
-                    self.get_logger().info(f"[loop {self.complete_loops} complete] planned_distance={self.planned_distance}"
+                    self.get_logger().info(f"[loop {self.complete_loops} complete] planned_distance={self.planned_distance*self.complete_loops}"
                                            f" actual_distance={self.actual_distance} error={self.error}")
 
-                    self.actual_distance = 0.0
                     self._waypoints_index = 0
-                    #return
 
             if abs(difference_in_theta) > 0.1:
                 self.linear_velocity = 0.0
@@ -171,32 +152,22 @@ class WayPoint(Node):
             dx = self.turtle_pose.x - self.prev_pose.x
             dy = self.turtle_pose.y - self.prev_pose.y
             dist = math.sqrt(dx * dx + dy * dy)
+
+
             self.actual_distance += dist
 
         self.prev_pose = self.turtle_pose
 
-
-    def angle_between(self, p1, p2):
-        # Calculate the components of the vector
-        dx = p2.x - p1.x
-        dy = p2.y - p1.y
-
-        # Use atan2 to get the angle in radians, then convert to degrees
-        angle_radians = math.atan2(dy, dx)
-        angle_degrees = math.degrees(angle_radians)
-
-        #return the angle
-        return angle_degrees
-
-
     async def load_callback(self, request, response):
-        self.get_logger().info('load_callback  called')
-
+        """initialize all values that will be used here"""
         self._waypoints = request.waypoint
         self._waypoints.append(self._waypoints[0])
-
+        previous_position = None
+        next_position = None
         response.distance = 0
+        how_large_x_is = 0.1
 
+        """If there are no waypoints, then exit the callback"""
         if request.waypoint is None:
             return response
 
@@ -205,22 +176,20 @@ class WayPoint(Node):
         self.set_pen_msg.off = 1
         await self.set_pen.call_async(self.set_pen_msg)
 
-        previous_p = None
-        next_p = None
 
         for index, position in enumerate(request.waypoint):
 
             if index > 0:
-                next_p = (position.x, position.y)
+                next_position = (position.x, position.y)
             else:
-                next_p = (position.x, position.y)
-                previous_p = (position.x, position.y)
+                next_position = (position.x, position.y)
+                previous_position = (position.x, position.y)
 
             #corner1_x, corner1_y, corner2_x, corner2_y = position
-            corner1_x = position.x + 0.1
-            corner1_y = position.y + 0.1
-            corner2_x = position.x - 0.1
-            corner2_y = position.y - 0.1
+            corner1_x = position.x + how_large_x_is
+            corner1_y = position.y + how_large_x_is
+            corner2_x = position.x - how_large_x_is
+            corner2_y = position.y - how_large_x_is
 
             self.teleport_msg.x, self.teleport_msg.y = corner1_x, corner1_y
             await self.teleport.call_async(self.teleport_msg)
@@ -234,10 +203,10 @@ class WayPoint(Node):
             await self.set_pen.call_async(self.set_pen_msg)
 
             ##second set of corners??
-            corner1_x = position.x - 0.1
-            corner1_y = position.y + 0.1
-            corner2_x = position.x + 0.1
-            corner2_y = position.y - 0.1
+            corner1_x = position.x - how_large_x_is
+            corner1_y = position.y + how_large_x_is
+            corner2_x = position.x + how_large_x_is
+            corner2_y = position.y - how_large_x_is
 
             self.teleport_msg.x, self.teleport_msg.y = corner1_x, corner1_y
             await self.teleport.call_async(self.teleport_msg)
@@ -250,8 +219,8 @@ class WayPoint(Node):
             self.set_pen_msg.off = 1
             await self.set_pen.call_async(self.set_pen_msg)
 
-            response.distance  += math.dist(previous_p, next_p)
-            previous_p = next_p
+            response.distance  += math.dist(previous_position, next_position)
+            previous_position = next_position
 
         self.set_pen_msg = SetPen.Request(r=250,g=0, b=0, width=1)
         await self.set_pen.call_async(self.set_pen_msg)
@@ -261,8 +230,15 @@ class WayPoint(Node):
         return response
 
 
-
     def toggle_callback(self, request, response):
+        """ Create a twist suitable for a turtle
+            Args:
+               request (float) : the forward velocity
+               response (float) : the angular velocity
+
+            Returns:
+               response - weather the turtle is in a MOVING state or STOPPED state
+         """
         if self._state == 1:
             self.get_logger().info('Stopping')
             self._state = 0
@@ -270,29 +246,6 @@ class WayPoint(Node):
             self.get_logger().info('Issuing Command!')
             self._state = 1
         return response
-
-
-
-    def reset_callback(self, request, response):
-        """Reset the count to zero."""
-        self.get_logger().info('RESET!')
-        self._count = 0
-        return response
-
-
-
-    def uncount_callback(self, uncount):
-        """
-        Subtract the value from count.
-
-        Args:
-        ----
-        uncount : std_msgs/msg/Int64 - amount to reset the count
-
-        """
-        self.get_logger().debug(f'Uncount: {uncount.data}')
-        self._count -= uncount.data
-
 
     def turtle_twist(self, xdot, omega):
         """ Create a twist suitable for a turtle
