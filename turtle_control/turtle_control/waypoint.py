@@ -103,28 +103,25 @@ class WayPoint(Node):
             dy = destination_y - self.turtle_pose.y
             dx = destination_x - self.turtle_pose.x
 
+            """Get the difference between wanted and current configurations"""
             distance_to_destination = math.sqrt(dx * dx + dy * dy)
             difference_in_theta = math.atan2(dy, dx) - self.turtle_pose.theta
 
-            ####
+            """Normalize the difference in theta"""
             while difference_in_theta > math.pi:
                 difference_in_theta = difference_in_theta - 2.0 * math.pi
             while difference_in_theta < -math.pi:
                 difference_in_theta = difference_in_theta + 2 * math.pi
-            ####
 
-
+            """Logic for what to do once we are close enough to a waypoint/destination"""
             if distance_to_destination < self.tolerance:
-
-                self.get_logger().info("Destination reached")
                 self._waypoints_index += 1
+                self.get_logger().info(f"Reached waypoint {self._waypoints_index}")
 
+                """Logic for calculating the error and publishing after each complete loop"""
                 if self._waypoints_index >= len(self._waypoints):
-                    #self._state = 0
-
                     self.complete_loops = self.complete_loops + 1
                     self.error = self.actual_distance - self.planned_distance * self.complete_loops
-
                     self.pub_metrics.publish(ErrorMetric(complete_loops=int(self.complete_loops), actual_distance=float(self.actual_distance),
                                                          error=float(self.error)))
 
@@ -133,6 +130,7 @@ class WayPoint(Node):
 
                     self._waypoints_index = 0
 
+            """Change the controller values depending on how far we are from destination"""
             if abs(difference_in_theta) > 0.1:
                 self.linear_velocity = 0.0
                 self.angular_velocity = 2.0 * difference_in_theta
@@ -140,22 +138,19 @@ class WayPoint(Node):
                 self.linear_velocity = 0.5 * distance_to_destination
                 self.angular_velocity = 0.5 * difference_in_theta
 
-
+            """Publish the calculations we made ==> move the turtle"""
             twist = self.turtle_twist(self.linear_velocity, self.angular_velocity)
             self.pub_twist.publish(twist)
-
 
     def pose_callback(self, pose_msg):
         self.turtle_pose = pose_msg
 
         if self._state == 1:
+            """update the position of the turtle and calculate how much it has traveled"""
             dx = self.turtle_pose.x - self.prev_pose.x
             dy = self.turtle_pose.y - self.prev_pose.y
             dist = math.sqrt(dx * dx + dy * dy)
-
-
             self.actual_distance += dist
-
         self.prev_pose = self.turtle_pose
 
     async def load_callback(self, request, response):
@@ -173,72 +168,78 @@ class WayPoint(Node):
 
         await self.reset.call_async(Empty.Request())
 
+        """Turn the pen off before starting the loop"""
         self.set_pen_msg.off = 1
         await self.set_pen.call_async(self.set_pen_msg)
 
-
         for index, position in enumerate(request.waypoint):
-
+            """Logic to handle creating a previous position, and a next position"""
             if index > 0:
                 next_position = (position.x, position.y)
             else:
                 next_position = (position.x, position.y)
                 previous_position = (position.x, position.y)
 
-            #corner1_x, corner1_y, corner2_x, corner2_y = position
+            """Grab the first diagonal of the x being drawn"""
             corner1_x = position.x + how_large_x_is
             corner1_y = position.y + how_large_x_is
             corner2_x = position.x - how_large_x_is
             corner2_y = position.y - how_large_x_is
 
+            """Teleport to the first corner of the first diagonal"""
             self.teleport_msg.x, self.teleport_msg.y = corner1_x, corner1_y
             await self.teleport.call_async(self.teleport_msg)
 
+            """turn the pen on in order to leave a train once teleporting"""
             self.set_pen_msg.off = 0
             await self.set_pen.call_async(self.set_pen_msg)
 
+            """Teleport to the second corner of the first diagonal in oder to draw it"""
             self.teleport_msg.x, self.teleport_msg.y = corner2_x, corner2_y
             await self.teleport.call_async(self.teleport_msg)
+
+            """Turn the pen off before starting the second diagonal"""
             self.set_pen_msg.off = 1
             await self.set_pen.call_async(self.set_pen_msg)
 
-            ##second set of corners??
+            """Grab the second diagonal of the x being drawn"""
             corner1_x = position.x - how_large_x_is
             corner1_y = position.y + how_large_x_is
             corner2_x = position.x + how_large_x_is
             corner2_y = position.y - how_large_x_is
 
+            """Teleport to the first corner of the second diagonal"""
             self.teleport_msg.x, self.teleport_msg.y = corner1_x, corner1_y
             await self.teleport.call_async(self.teleport_msg)
 
+            """turn the pen on in order to leave a train once teleporting"""
             self.set_pen_msg.off = 0
             await self.set_pen.call_async(self.set_pen_msg)
 
+            """Teleport to the second corner of the second diagonal in oder to draw it"""
             self.teleport_msg.x, self.teleport_msg.y = corner2_x, corner2_y
             await self.teleport.call_async(self.teleport_msg)
+
+            """Turn the pen off"""
             self.set_pen_msg.off = 1
             await self.set_pen.call_async(self.set_pen_msg)
 
+            """Logic to calculate the total distance of the waypoints"""
             response.distance  += math.dist(previous_position, next_position)
             previous_position = next_position
 
+        """Change the pen color before we start drawing a path"""
         self.set_pen_msg = SetPen.Request(r=250,g=0, b=0, width=1)
         await self.set_pen.call_async(self.set_pen_msg)
 
+        """initialize waypoints index and the planned distance"""
         self._waypoints_index = 0
         self.planned_distance = response.distance
         return response
 
 
     def toggle_callback(self, request, response):
-        """ Create a twist suitable for a turtle
-            Args:
-               request (float) : the forward velocity
-               response (float) : the angular velocity
-
-            Returns:
-               response - weather the turtle is in a MOVING state or STOPPED state
-         """
+        """Creates a toggle which switches the turtle to either MOVING or STOPPED"""
         if self._state == 1:
             self.get_logger().info('Stopping')
             self._state = 0

@@ -1,7 +1,14 @@
+Collaborators:
+- Saif
+- Robert
+- Theo
+- Florian
+
 1) googled what build_type is ament_python to help find <build_type>
 
-2) googled `    make sure there are no other ros nodes `to get `rosnode list`
+2) googled `make sure there are no other ros nodes `to get `rosnode list`
 
-
+3) goolgled how to fix detup.py
+    https://chatgpt.com/share/68db30b6-976c-8003-a84a-8a4b6fd69451
 
 
